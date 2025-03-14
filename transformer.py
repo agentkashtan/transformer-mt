@@ -193,7 +193,3 @@ class Transformer(nn.Module):
     def project(self, x):
         return self.proj(x)
 
-def c_mask(size):
-    mask = torch.triu(torch.ones(size, size), 1).type(torch.int)
-    return mask == 0
-

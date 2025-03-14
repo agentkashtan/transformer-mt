@@ -1,10 +1,12 @@
 import os
 
+from config import CONFIG
+
 from tokenizers import ByteLevelBPETokenizer
 
 
 def get_tokenizer(language, training_data=None):
-    VOCAB_SIZE = 30522
+    VOCAB_SIZE = CONFIG["vocab_size"]
     if language not in ["en", "fr"]:
         raise ValueError("Invalid language")
 

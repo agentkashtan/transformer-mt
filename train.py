@@ -3,8 +3,11 @@ import os
 from transformer import Transformer
 from dataset import TDataset
 from tokenizer import get_tokenizer
+from config import CONFIG
 
 from datasets import load_dataset
+import torch
+import torch.nn as nn
 from torch.utils.data import  DataLoader
 from tqdm import tqdm
 
@@ -14,37 +17,38 @@ def main():
     en_corcus = [item["translation"]["en"] for item in books["train"]]
     fr_corcus = [item["translation"]["fr"] for item in books["train"]]
     
-    VOCAB_SIZE = 30522
+    VOCAB_SIZE = CONFIG["vocab_size"]
+
     tokenizer_en = get_tokenizer("en", en_corcus)
-    tokenizer_en = get_tokenizer("fr", fr_corcus)
+    tokenizer_fr = get_tokenizer("fr", fr_corcus)
 
     WEIGHTS_PATH = "weights"
     os.makedirs(WEIGHTS_PATH, exist_ok=True)
 
     #max_length_src + 2
-    SRC_LEN = 481
+    SRC_LEN = CONFIG["src_len"]
     #max_length_tgt + 2
-    TGT_LEN = 596
+    TGT_LEN = CONFIG["tgt_len"]
 
     data = books["train"].train_test_split(test_size=0.1, shuffle=True)
     training_data = data["train"]
     validation_data = data["test"]
     training_dataset = TDataset(training_data, tokenizer_en, tokenizer_fr, SRC_LEN, TGT_LEN)
     validation_dataset = TDataset(validation_data, tokenizer_en, tokenizer_fr, SRC_LEN, TGT_LEN)
-    training_dataloader = DataLoader(training_dataset, batch_size=16, shuffle=True)
+    training_dataloader = DataLoader(training_dataset, batch_size=CONFIG["batch_size"], shuffle=True)
     validation_dataloader = DataLoader(validation_dataset, batch_size=1, shuffle=True)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Devive: {device}')
     model = Transformer(VOCAB_SIZE, VOCAB_SIZE, SRC_LEN, TGT_LEN)
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG["lr"], betas=(CONFIG["beta1"], CONFIG["beta2"]), eps=CONFIG["eps"])
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_fr.token_to_id("<pad>"), label_smoothing=0.1)
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'Total params: {pytorch_total_params}')
-    num_epoch = 30
-
+    
+    num_epoch = CONFIG["epoch"]
     step = 0
     for epoch in range(num_epoch):
         model.train()
@@ -67,7 +71,7 @@ def main():
             optimizer.step()
 
             step += 1
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % 5 == 0 or epoch + 1 == num_epoch:
             torch.save({
                 "epoch": epoch + 1,
                 "model_state_dict": model.state_dict(),

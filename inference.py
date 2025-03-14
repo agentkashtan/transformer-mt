@@ -3,7 +3,9 @@ import sys
 
 import torch
 
-from transformer import Transformer, c_mask
+from config import CONFIG
+from dataset import c_mask
+from transformer import Transformer
 from tokenizer import get_tokenizer
 
 
@@ -17,13 +19,14 @@ def inference(src, model, device, src_len, tgt_len, tokenizer_src, tokenizer_tgt
             torch.tensor(src_tokens, dtype=torch.int64),
             torch.tensor([tokenizer_src.token_to_id('</s>')], dtype=torch.int64),
             ])
+        src_mask = None
         #src_mask = (encoder_input != tokenizer_src.token_to_id('<pad>')).unsqueeze(0).unsqueeze(0).unsqueeze(0).int()
         # (1, 1, 1, src_len)
         #src_mask = src_mask.to(device)
         # (1, src_len)
         encoder_input = encoder_input.unsqueeze(0).to(device)
         # (1, src_len, d_model)
-        encoder_output = model.encode(encoder_input, None)
+        encoder_output = model.encode(encoder_input, src_mask)
         #print(encoder_output.shape)        
         # (1, 1)
         decoder_input = torch.tensor([tokenizer_tgt.token_to_id('<s>')], dtype=torch.int64).unsqueeze(0).to(device)
@@ -31,7 +34,7 @@ def inference(src, model, device, src_len, tgt_len, tokenizer_src, tokenizer_tgt
             tgt_mask = c_mask(decoder_input.size(-1)).to(device)
             # batch, seq_len, d_model
 
-            decoder_output = model.decode(encoder_output, None, decoder_input, tgt_mask)
+            decoder_output = model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
             output = model.project(decoder_output[:, -1, :])
             _, prediction = torch.max(output, dim=-1)
             if prediction.item() == tokenizer_tgt.token_to_id('</s>'):
@@ -42,18 +45,17 @@ def inference(src, model, device, src_len, tgt_len, tokenizer_src, tokenizer_tgt
 
 
 def main(*args):
-    SRC_LEN = 481
-    TGT_LEN = 596
-    VOCAB_SIZE = 30522
+    SRC_LEN = CONFIG["src_len"]
+    TGT_LEN = CONFIG["tgt_len"]
+    VOCAB_SIZE = CONFIG["vocab_size"]
     
     tokenizer_src = get_tokenizer("en")
     tokenizer_tgt = get_tokenizer("fr")
 
     checkpoint = torch.load(args[0], weights_only=True)
+    print(f'epoch: {checkpoint["epoch"]}; loss: {checkpoint["loss"]}')
     model = Transformer(VOCAB_SIZE, VOCAB_SIZE, SRC_LEN, TGT_LEN)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
